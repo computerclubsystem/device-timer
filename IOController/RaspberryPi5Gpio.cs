@@ -10,7 +10,10 @@ public class RaspberryPi5Gpio
 
     public void Init()
     {
-        _gpioController = new GpioController(PinNumberingScheme.Logical, new LibGpiodDriver(4));
+        // On Raspberry Pi 5 the driver will be autoselected to "new LibGpioDriver(4)"
+        // int gpioChipNumber = 4;
+        _gpioController = new GpioController(PinNumberingScheme.Logical); //, new LibGpiodDriver(gpioChipNumber));
+        // _gpioController.GetPinMode(1);
         // controller.OpenPin(pin20, PinMode.InputPullUp);
 
         // controller.RegisterCallbackForPinValueChangedEvent(
@@ -33,14 +36,33 @@ public class RaspberryPi5Gpio
         // }
     }
 
-    public void ConfigurePinAsOutput(int pin)
+    public GpioPin ConfigurePinAsOutput(int pin)
     {
-        _gpioController.OpenPin(pin, PinMode.Output);
+        return _gpioController.OpenPin(pin, PinMode.Output);
     }
 
     public void SetOutputPinValue(int pin, Boolean value)
     {
         _gpioController.Write(pin, value ? PinValue.High : PinValue.Low);
+    }
+
+    public GpioPin ConfigurePinAsInput(int pin, PinMode pinMode)
+    {
+        return _gpioController.OpenPin(pin, pinMode);
+    }
+
+    public void RegisterCallbackForPinValueChangedEvent(int pin, PinEventTypes eventTypes, PinChangeEventHandler eventHandler)
+    {
+        _gpioController.RegisterCallbackForPinValueChangedEvent(
+            pin,
+            eventTypes,
+            eventHandler
+        );
+    }
+
+    public void UnregisterCallbackForPinValueChangedEvent(int pin, PinChangeEventHandler eventHandler)
+    {
+        _gpioController.UnregisterCallbackForPinValueChangedEvent(pin, eventHandler);
     }
 
     public void ClosePin(int pin)
@@ -50,5 +72,10 @@ public class RaspberryPi5Gpio
             return;
         }
         _gpioController.ClosePin(pin);
+    }
+
+    public void Dispose()
+    {
+        _gpioController.Dispose();
     }
 }

@@ -1,30 +1,76 @@
+using System.Device.Gpio;
 using DeviceTimer.IOController;
+using DeviceTimerApp;
 
-namespace DeviceTimerApp;
+namespace DeviceTimer.DeviceTimerApp;
 
 public class App
 {
     private AppState _state;
     private RaspberryPi5Gpio _gpio;
+    private PlayStationPower _psPower;
 
     public async Task Start()
     {
         _state = CreateAppState();
         _gpio = CreateRaspberryPi5Gpio();
         ConfigurePins();
-        SetStartPlayStationPinValue(false);
-        // TODO: Start the flow and wait for the cancellation token
+        // RegisterPinValueChangedCallbacks();
+        _psPower = new PlayStationPower(_gpio, _state.StartPlayStationPowerInputPin, _state.StartPlayStationPowerOutputPin);
+        // _psPower.StartMonitoring();
+        // SetStartPlayStationPowerOutputPinValue(false);
+        // TODO: Start WebSocket
+        // TODO: Start the GPIO flow and wait for the cancellation token
+        StartGpioFlow();
+        await Task.Delay(Timeout.InfiniteTimeSpan, _state.CancellationToken);
+        CleanUp();
     }
 
-    private void SetStartPlayStationPinValue(bool value)
+    private async void StartGpioFlow()
     {
-        _gpio.SetOutputPinValue(_state.StartPlayStationPin, value);
+        _psPower.StartMonitoring();
+        // await Task.Factory.StartNew(async () =>
+        // {
+        //     string state = "power-up-playstation";
+        //     while (!_state.CancellationToken.IsCancellationRequested)
+        //     {
+        //         if (state == "power-up-playstation")
+        //         {
+        //             _gpio.SetOutputPinValue(_state.StartPlayStationPowerOutputPinNumber, false);
+        //             await Task.Delay(TimeSpan.FromSeconds(5), _state.CancellationToken);
+        //             _gpio.SetOutputPinValue(_state.StartPlayStationPowerOutputPinNumber, true);
+        //             await Task.Delay(TimeSpan.FromSeconds(1), _state.CancellationToken);
+        //         }
+        //     }
+        // }, _state.CancellationToken);
     }
+
+
+    // private void SetStartPlayStationPowerOutputPinValue(bool value)
+    // {
+    //     _gpio.SetOutputPinValue(_state.StartPlayStationPowerOutputPinNumber, value);
+    // }
 
     private void ConfigurePins()
     {
-        _gpio.ConfigurePinAsOutput(_state.StartPlayStationPin);
+        _state.StartPlayStationPowerOutputPin = _gpio.ConfigurePinAsOutput(_state.StartPlayStationPowerOutputPinNumber);
+        _state.StartPlayStationPowerOutputPin.Write(PinValue.Low);
+        _state.StartPlayStationPowerInputPin = _gpio.ConfigurePinAsInput(_state.StartPlayStationPowerInputPinNumber, PinMode.InputPullDown);
     }
+
+    // private void RegisterPinValueChangedCallbacks()
+    // {
+    //     _gpio.RegisterCallbackForPinValueChangedEvent(
+    //         _state.StartPlayStationPowerInputPinNumber,
+    //          PinEventTypes.Rising,
+    //          OnPlayStationPowerInputPinValueChanged
+    //     );
+    // }
+
+    // private void OnPlayStationPowerInputPinValueChanged(object sender, PinValueChangedEventArgs pinValueChangedEventArgs)
+    // {
+    //     Console.WriteLine("{0} : PlayStationPowerInputPin value {1}", DateTime.Now.ToString("s"), pinValueChangedEventArgs.ChangeType);
+    // }
 
     private RaspberryPi5Gpio CreateRaspberryPi5Gpio()
     {
@@ -34,19 +80,31 @@ public class App
     }
     private AppState CreateAppState()
     {
+
+        var cts = new CancellationTokenSource();
         AppState state = new()
         {
-            CancellationTokenSource = new CancellationTokenSource(),
-            StartPlayStationPin = 23,
+            CancellationTokenSource = cts,
+            CancellationToken = cts.Token,
+            StartPlayStationPowerInputPinNumber = 25,
+            StartPlayStationPowerOutputPinNumber = 23,
         };
         state.CancellationToken = state.CancellationTokenSource.Token;
         return state;
     }
 
+    private void CleanUp()
+    {
+        _gpio.Dispose();
+    }
+
     private class AppState
     {
-        public required int StartPlayStationPin { get; set; }
+        public required int StartPlayStationPowerInputPinNumber { get; set; }
+        public GpioPin StartPlayStationPowerInputPin { get; set; }
+        public required int StartPlayStationPowerOutputPinNumber { get; set; }
+        public GpioPin StartPlayStationPowerOutputPin { get; set; }
         public required CancellationTokenSource CancellationTokenSource { get; set; }
-        public CancellationToken CancellationToken { get; set; }
+        public required CancellationToken CancellationToken { get; set; }
     }
 }
