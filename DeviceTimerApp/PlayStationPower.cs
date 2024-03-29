@@ -9,50 +9,56 @@ namespace DeviceTimer.DeviceTimerApp;
 public class PlayStationPower
 {
     private readonly RaspberryPi5Gpio gpio;
-    private readonly GpioPin outputPin;
-    private readonly GpioPin inputPin;
+    private Pins pins;
+    private Subjects subjects;
     private CancellationTokenSource tryPowerOnCancellationTokenSource;
     private Task powerOnTask;
-    private readonly Subject<PinValueChangedEventArgs> inputPinValueChangesSubject;
-    private readonly IObservable<PinValueChangedEventArgs> inputPinValueChangesObservable;
-    private readonly Subject<PinEventTypes> inputPinValueChangeDetectedSubject;
+
     private readonly object lockObject = new();
 
     private IDisposable inputPinValueChangesSubscription;
     private readonly TimeSpan inputPinThrottleTimeSpan = TimeSpan.FromSeconds(1);
 
-    public PlayStationPower(RaspberryPi5Gpio gpio, GpioPin inputPin, GpioPin outputPin)
+    public PlayStationPower(RaspberryPi5Gpio gpio, GpioPin powerOnInputPin, GpioPin powerOnOutputPin, GpioPin timeOnOutputPin)
     {
         this.gpio = gpio;
-        this.outputPin = outputPin;
-        this.inputPin = inputPin;
-        inputPinValueChangesSubject = new();
-        inputPinValueChangesObservable = inputPinValueChangesSubject.AsObservable();
-        inputPinValueChangeDetectedSubject = new();
+        pins = new Pins()
+        {
+            PowerOnInputPin = powerOnInputPin,
+            PowerOnOutputPin = powerOnOutputPin,
+            TimeOnOutputPin = timeOnOutputPin,
+        };
+        subjects = new Subjects()
+        {
+            PowerOnInputPinValueChangesSubject = new(),
+            PowerOnInputPinValueChangeDetectedSubject = new(),
+        };
+        subjects.PowerOnInputPinValueChangesObservable = subjects.PowerOnInputPinValueChangesSubject.AsObservable();
     }
 
     public IObservable<PinEventTypes> GetPowerButtonChangeDetectedObservable()
     {
-        return inputPinValueChangeDetectedSubject.AsObservable();
+        return subjects.PowerOnInputPinValueChangeDetectedSubject.AsObservable();
     }
 
     public void StartMonitoring()
     {
-        inputPinValueChangesSubscription = inputPinValueChangesObservable
+        inputPinValueChangesSubscription = subjects.PowerOnInputPinValueChangesObservable
             .Throttle(inputPinThrottleTimeSpan)
             .Subscribe(OnPowerInputPinChangeDetected);
         gpio.RegisterCallbackForPinValueChangedEvent(
-            inputPin.PinNumber,
+            pins.PowerOnInputPin.PinNumber,
             PinEventTypes.Rising | PinEventTypes.Falling,
             OnPlayStationPowerInputPinValueChanged
         );
         tryPowerOnCancellationTokenSource = new CancellationTokenSource();
         powerOnTask = Task.Factory.StartNew(TryPowerOnAction, tryPowerOnCancellationTokenSource.Token);
+        Task.Factory.StartNew(TryPowerOnAction2, tryPowerOnCancellationTokenSource.Token);
     }
 
     private void OnPowerInputPinChangeDetected(PinValueChangedEventArgs args)
     {
-        inputPinValueChangeDetectedSubject.OnNext(args.ChangeType);
+        subjects.PowerOnInputPinValueChangeDetectedSubject.OnNext(args.ChangeType);
         if (args.ChangeType == PinEventTypes.Rising)
         {
             SetTryPowerOnOutputPinValue(PinValue.Low);
@@ -64,13 +70,21 @@ public class PlayStationPower
     {
         lock (lockObject)
         {
-            outputPin.Write(pinValue);
+            pins.PowerOnOutputPin.Write(pinValue);
+        }
+    }
+
+    private void SetTimeOnOutputPinValue(PinValue pinValue)
+    {
+        lock (lockObject)
+        {
+            pins.TimeOnOutputPin.Write(pinValue);
         }
     }
 
     public void StopMonitoring()
     {
-        gpio.UnregisterCallbackForPinValueChangedEvent(inputPin.PinNumber, OnPlayStationPowerInputPinValueChanged);
+        gpio.UnregisterCallbackForPinValueChangedEvent(pins.PowerOnInputPin.PinNumber, OnPlayStationPowerInputPinValueChanged);
         SetTryPowerOnOutputPinValue(PinValue.Low);
     }
 
@@ -108,14 +122,50 @@ public class PlayStationPower
         SetTryPowerOnOutputPinValue(PinValue.Low);
     }
 
+    private async void TryPowerOnAction2()
+    {
+        while (!tryPowerOnCancellationTokenSource.IsCancellationRequested)
+        {
+            if (!tryPowerOnCancellationTokenSource.IsCancellationRequested)
+            {
+                SetTimeOnOutputPinValue(PinValue.High);
+                await Task.Delay(TimeSpan.FromSeconds(Random.Shared.NextDouble() * 3 + 2), tryPowerOnCancellationTokenSource.Token);
+            }
+            if (!tryPowerOnCancellationTokenSource.IsCancellationRequested)
+            {
+                if (IsPlayStationPowerOff())
+                {
+                    SetTimeOnOutputPinValue(PinValue.Low);
+                    await Task.Delay(TimeSpan.FromSeconds(Random.Shared.NextDouble() * 3 + 2), tryPowerOnCancellationTokenSource.Token);
+                }
+            }
+        }
+        // The thread was cancelled - turn off the power on output pin
+        SetTimeOnOutputPinValue(PinValue.Low);
+    }
+
     private bool IsPlayStationPowerOff()
     {
-        var value = inputPin.Read();
+        var value = pins.PowerOnInputPin.Read();
         return value == PinValue.Low;
     }
 
     private void OnPlayStationPowerInputPinValueChanged(object sender, PinValueChangedEventArgs pinValueChangedEventArgs)
     {
-        inputPinValueChangesSubject.OnNext(pinValueChangedEventArgs);
+        subjects.PowerOnInputPinValueChangesSubject.OnNext(pinValueChangedEventArgs);
+    }
+
+    private class Pins
+    {
+        public GpioPin PowerOnOutputPin { get; set; }
+        public GpioPin TimeOnOutputPin { get; set; }
+        public GpioPin PowerOnInputPin { get; set; }
+    }
+
+    private class Subjects
+    {
+        public Subject<PinValueChangedEventArgs> PowerOnInputPinValueChangesSubject { get; set; }
+        public IObservable<PinValueChangedEventArgs> PowerOnInputPinValueChangesObservable { get; set; }
+        public Subject<PinEventTypes> PowerOnInputPinValueChangeDetectedSubject { get; set; }
     }
 }

@@ -9,12 +9,22 @@ public class App
     private RaspberryPi5Gpio _gpio;
     private PlayStationPower _psPower;
 
-    public async Task Start()
+    public App(string[] args)
     {
         _state = CreateAppState();
+        _state.Args = args;
+    }
+
+    public async Task Start()
+    {
         _gpio = CreateRaspberryPi5Gpio();
         ConfigurePins();
-        _psPower = new PlayStationPower(_gpio, _state.StartPlayStationPowerInputPin, _state.StartPlayStationPowerOutputPin);
+        _psPower = new PlayStationPower(
+            _gpio,
+            _state.StartPlayStationPowerInputPin,
+            _state.StartPlayStationPowerOutputPin,
+            _state.StartTimeOnOutputPin
+        );
         // TODO: Start WebSocket
         StartGpioFlow();
         try
@@ -35,6 +45,8 @@ public class App
         _state.StartPlayStationPowerOutputPin = _gpio.ConfigurePinAsOutput(_state.StartPlayStationPowerOutputPinNumber);
         _state.StartPlayStationPowerOutputPin.Write(PinValue.Low);
         _state.StartPlayStationPowerInputPin = _gpio.ConfigurePinAsInput(_state.StartPlayStationPowerInputPinNumber, PinMode.InputPullDown);
+        _state.StartTimeOnOutputPin = _gpio.ConfigurePinAsOutput(_state.StartTimeOnOutputPinNumber);
+        _state.StartTimeOnOutputPin.Write(PinValue.Low);
     }
 
     private RaspberryPi5Gpio CreateRaspberryPi5Gpio()
@@ -54,6 +66,7 @@ public class App
             CancellationToken = cts.Token,
             StartPlayStationPowerInputPinNumber = 25,
             StartPlayStationPowerOutputPinNumber = 23,
+            StartTimeOnOutputPinNumber = 22,
         };
         state.CancellationToken = state.CancellationTokenSource.Token;
         return state;
@@ -71,7 +84,10 @@ public class App
         public GpioPin StartPlayStationPowerInputPin { get; set; }
         public required int StartPlayStationPowerOutputPinNumber { get; set; }
         public GpioPin StartPlayStationPowerOutputPin { get; set; }
+        public GpioPin StartTimeOnOutputPin { get; set; }
+        public required int StartTimeOnOutputPinNumber { get; set; }
         public required CancellationTokenSource CancellationTokenSource { get; set; }
         public required CancellationToken CancellationToken { get; set; }
+        public string[] Args { get; set; }
     }
 }
