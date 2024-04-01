@@ -1,25 +1,20 @@
-﻿// using System.Net.Security;
-// using System.Net.WebSockets;
-// using System.Text;
-
-using System.Net.Security;
+﻿using System.Net.Security;
 using System.Net.WebSockets;
-using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 
 namespace DeviceTimer.WebSocketConnector;
 
-public class ReconnectingWebSocket
+public class WSConnector
 {
-    private ReconnectingWebSocketState state;
+    private WSConnectorState state;
     private Action connectedAction;
     private Action disconnectedAction;
     private Action<Exception> exceptionAction;
     private Action<byte[]> dataReceivedAction;
 
-    public void Init(ReconnectingWebSocketSettings settings)
+    public void Init(WSConnectorSettings settings)
     {
-        state = new ReconnectingWebSocketState
+        state = new WSConnectorState
         {
             Settings = settings,
             CancellationTokenSource = new CancellationTokenSource()
@@ -78,6 +73,7 @@ public class ReconnectingWebSocket
             catch (Exception ex)
             {
                 exceptionAction(ex);
+                Thread.Sleep(TimeSpan.FromSeconds(1));
                 //Log("Cannot connect. " + ex.ToString());
             }
         }
@@ -154,6 +150,13 @@ public class ReconnectingWebSocket
             state.Settings.ClientCertificateCertFileText.AsSpan(),
             state.Settings.ClientCertificateKeyFileText.AsSpan()
         );
+        // TODO: Find the reason why using .pem file which is just the /key and .crt files concatenated 
+        //     : does not work - its cert.GetRSAPrivateKey() returns null meaning no certificate is used with the WebSocket
+        //     : and the server receives empty certificate when the client is connected
+        // X509Certificate2 cert = X509Certificate2.CreateFromPem(
+        //     state.Settings.ClientCertificatePemFileText.AsSpan()
+        // );
+        // var pk = cert.GetRSAPrivateKey();
         state.WebSocket.Options.ClientCertificates = new X509Certificate2Collection(cert);
         state.WebSocket.Options.RemoteCertificateValidationCallback = (object sender, X509Certificate? certificate, X509Chain? chain, SslPolicyErrors sslPolicyErrors) =>
         {
@@ -170,18 +173,19 @@ public class ReconnectingWebSocket
         };
     }
 
-    private class ReconnectingWebSocketState
+    private class WSConnectorState
     {
-        public ReconnectingWebSocketSettings Settings { get; set; }
+        public WSConnectorSettings Settings { get; set; }
         public ClientWebSocket WebSocket { get; set; }
         public CancellationTokenSource CancellationTokenSource { get; set; }
         public CancellationToken CancellationToken { get; set; }
     }
 }
 
-public class ReconnectingWebSocketSettings
+public class WSConnectorSettings
 {
     public Uri Uri { get; set; }
+    // public string ClientCertificatePemFileText { get; set; }
     public string ClientCertificateCertFileText { get; set; }
     public string ClientCertificateKeyFileText { get; set; }
     public string ServerCertificateThumbnail { get; set; }

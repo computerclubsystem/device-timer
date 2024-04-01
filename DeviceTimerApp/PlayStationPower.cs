@@ -19,7 +19,7 @@ public class PlayStationPower
     private IDisposable inputPinValueChangesSubscription;
     private readonly TimeSpan inputPinThrottleTimeSpan = TimeSpan.FromSeconds(1);
 
-    public PlayStationPower(RaspberryPi5Gpio gpio, GpioPin powerOnInputPin, GpioPin powerOnOutputPin, GpioPin timeOnOutputPin)
+    public PlayStationPower(RaspberryPi5Gpio gpio, GpioPin powerOnInputPin, GpioPin powerOnOutputPin, GpioPin timeOnOutputPin, GpioPin additionalOutputPin)
     {
         this.gpio = gpio;
         pins = new Pins()
@@ -27,6 +27,7 @@ public class PlayStationPower
             PowerOnInputPin = powerOnInputPin,
             PowerOnOutputPin = powerOnOutputPin,
             TimeOnOutputPin = timeOnOutputPin,
+            AdditionalOutputPin = additionalOutputPin
         };
         subjects = new Subjects()
         {
@@ -54,6 +55,7 @@ public class PlayStationPower
         tryPowerOnCancellationTokenSource = new CancellationTokenSource();
         powerOnTask = Task.Factory.StartNew(TryPowerOnAction, tryPowerOnCancellationTokenSource.Token);
         Task.Factory.StartNew(TryPowerOnAction2, tryPowerOnCancellationTokenSource.Token);
+        Task.Factory.StartNew(TryPowerOnAction3, tryPowerOnCancellationTokenSource.Token);
     }
 
     private void OnPowerInputPinChangeDetected(PinValueChangedEventArgs args)
@@ -68,17 +70,24 @@ public class PlayStationPower
 
     private void SetTryPowerOnOutputPinValue(PinValue pinValue)
     {
-        lock (lockObject)
-        {
-            pins.PowerOnOutputPin.Write(pinValue);
-        }
+        LockAction(() => pins.PowerOnOutputPin.Write(pinValue));
     }
 
     private void SetTimeOnOutputPinValue(PinValue pinValue)
     {
+        LockAction(() => pins.TimeOnOutputPin.Write(pinValue));
+    }
+
+    private void SetAdditionalOutputPinValue(PinValue pinValue)
+    {
+        LockAction(() => pins.AdditionalOutputPin.Write(pinValue));
+    }
+
+    private void LockAction(Action action)
+    {
         lock (lockObject)
         {
-            pins.TimeOnOutputPin.Write(pinValue);
+            action();
         }
     }
 
@@ -144,6 +153,28 @@ public class PlayStationPower
         SetTimeOnOutputPinValue(PinValue.Low);
     }
 
+    private async void TryPowerOnAction3()
+    {
+        while (!tryPowerOnCancellationTokenSource.IsCancellationRequested)
+        {
+            if (!tryPowerOnCancellationTokenSource.IsCancellationRequested)
+            {
+                SetAdditionalOutputPinValue(PinValue.High);
+                await                                                                                                                      Task.Delay(TimeSpan.FromSeconds(Random.Shared.NextDouble() * 3 + 2), tryPowerOnCancellationTokenSource.Token);
+            }
+            if (!tryPowerOnCancellationTokenSource.IsCancellationRequested)
+            {
+                if (IsPlayStationPowerOff())
+                {
+                    SetAdditionalOutputPinValue(PinValue.Low);
+                    await Task.Delay(TimeSpan.FromSeconds(Random.Shared.NextDouble() * 3 + 2), tryPowerOnCancellationTokenSource.Token);
+                }
+            }
+        }
+        // The thread was cancelled - turn off the power on output pin
+        SetAdditionalOutputPinValue(PinValue.Low);
+    }
+
     private bool IsPlayStationPowerOff()
     {
         var value = pins.PowerOnInputPin.Read();
@@ -157,9 +188,10 @@ public class PlayStationPower
 
     private class Pins
     {
+        public GpioPin PowerOnInputPin { get; set; }
         public GpioPin PowerOnOutputPin { get; set; }
         public GpioPin TimeOnOutputPin { get; set; }
-        public GpioPin PowerOnInputPin { get; set; }
+        public GpioPin AdditionalOutputPin { get; set; }
     }
 
     private class Subjects
