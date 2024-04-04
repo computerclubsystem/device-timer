@@ -1,5 +1,8 @@
 using System.Device.Gpio;
+using System.Reflection.Metadata;
+using System.Runtime.CompilerServices;
 using DeviceTimer.IOController;
+using DeviceTimer.Sensors;
 using DeviceTimer.WebSocketConnector;
 
 namespace DeviceTimer.DeviceTimerApp;
@@ -9,11 +12,11 @@ public class App
     private AppState _state;
     private RaspberryPi5Gpio _gpio;
     private PlayStationPower _psPower;
+    private Temperatures _temperatures = new();
 
     public App(string[] args)
     {
-        _state = CreateAppState();
-        _state.Args = args;
+        _state = CreateAppState(args);
     }
 
     public async Task Start()
@@ -44,13 +47,15 @@ public class App
         _state.WSConnector.SetDataReceivedAction(OnWebSocketDataReceived);
         _state.WSConnector.SetDisconnectedAction(OnWebSocketDisconnected);
         _state.WSConnector.SetExceptionAction(OnWebSocketException);
-        WSConnectorSettings wsSettings = new WSConnectorSettings()
+        WSConnectorSettings wsSettings = new()
         {
-            Uri = new Uri("wss://192.168.1.9:65445"),
+            // wss://192.168.1.9:65445
+            Uri = new Uri(_state.EnvironmentValues.WebSocketUrl),
             // ClientCertificatePemFileText = File.ReadAllText("/etc/ssl/certs/device-timer.pem"),
             ClientCertificateCertFileText = File.ReadAllText("/etc/ssl/certs/device-timer.crt"),
             ClientCertificateKeyFileText = File.ReadAllText("/etc/ssl/certs/device-timer.key"),
-            ServerCertificateThumbnail = _state.ServerCertificateThumbnail
+            // 02C347A57731C65931D30D3D93298BDC610488A8
+            ServerCertificateThumbnail = _state.EnvironmentValues.ServerCertificateThumbprint,
         };
         _state.WSConnector.Init(wsSettings);
         _state.WSConnector.Connect();
@@ -100,23 +105,45 @@ public class App
         return rpi5Gpio;
     }
 
-    private AppState CreateAppState()
+    private AppState CreateAppState(string[] args)
     {
-
         var cts = new CancellationTokenSource();
         AppState state = new()
         {
+            Args = args,
             CancellationTokenSource = cts,
             CancellationToken = cts.Token,
             StartPlayStationPowerInputPinNumber = 25,
             StartPlayStationPowerOutputPinNumber = 23,
             StartTimeOnOutputPinNumber = 22,
             AdditionalOutputPinNumber = 24,
+            EnvironmentValues = CreateEnvironmentValues(args),
         };
         state.CancellationToken = state.CancellationTokenSource.Token;
-        // TODO: Get this from command line param / environment
-        state.ServerCertificateThumbnail = "02C347A57731C65931D30D3D93298BDC610488A8";
         return state;
+    }
+
+    private EnvironmentValues CreateEnvironmentValues(string[] args)
+    {
+        EnvironmentValues result = new();
+        var cmdLineDict = CreateCommandLineValuesDictionary(args);
+        result.WebSocketUrl = cmdLineDict.GetValueOrDefault("--web-socket-url") ?? Environment.GetEnvironmentVariable("DEVICE_TIMER_WEB_SOCKET_URL");
+        result.ServerCertificateThumbprint = cmdLineDict.GetValueOrDefault("--server-certificate-thumbprint") ?? Environment.GetEnvironmentVariable("DEVICE_TIMER_SERVER_CERTIFICATE_THUMBPRINT");
+        return result;
+    }
+
+    private Dictionary<string, string> CreateCommandLineValuesDictionary(string[] cmdLineArgs)
+    {
+        Dictionary<string, string> result = [];
+        if (cmdLineArgs.Length == 0)
+        {
+            return result;
+        }
+        for (int i = 0; i < cmdLineArgs.Length - 1; i += 2)
+        {
+            result.Add(cmdLineArgs[i], cmdLineArgs[i + 1]);
+        }
+        return result;
     }
 
     private void CleanUp()
@@ -139,11 +166,17 @@ public class App
         public required CancellationToken CancellationToken { get; set; }
         public string[] Args { get; set; }
         public WSConnector WSConnector { get; set; }
-        public string ServerCertificateThumbnail { get; set; }
         public int WSConnectorConnectionsCount { get; set; }
         public int WSConnectorDisconnectionsCount { get; set; }
         public int WSConnectorExceptionsCount { get; set; }
         public long WSConnectorBytesReceivedCount { get; set; }
         public long WSConnectorBytesSentCount { get; set; }
+        public EnvironmentValues EnvironmentValues { get; set; }
+    }
+
+    private class EnvironmentValues
+    {
+        public string WebSocketUrl { get; set; }
+        public string ServerCertificateThumbprint { get; set; }
     }
 }

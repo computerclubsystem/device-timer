@@ -3,6 +3,7 @@
   <ItemGroup>
     <ProjectReference Include="..\WebSocketConnector\WebSocketConnector.csproj" />
     <ProjectReference Include="..\IOController\IOController.csproj" />
+    <ProjectReference Include="..\Sensors\Sensors.csproj" />
   </ItemGroup>
 
   <ItemGroup>

@@ -12,7 +12,7 @@ ssh pi@192.168.1.4
 ```bash
 cd ~
 ```
-- Download dotnet 8 - instructions in  https://learn.microsoft.com/en-us/dotnet/core/install/linux-scripted-manual#manual-install :
+- Download `.NET 8` - instructions in https://learn.microsoft.com/en-us/dotnet/core/install/linux-scripted-manual#manual-install :
 ```bash
 wget https://download.visualstudio.microsoft.com/download/pr/3bebb4ec-8bb7-4854-b0a2-064bf50805eb/38e6972473f83f11963245ffd940b396/dotnet-sdk-8.0.201-linux-arm64.tar.gz
 ```
@@ -32,6 +32,16 @@ nano .bashrc
 ```
 export DOTNET_ROOT=~/.dotnet
 export PATH=~/.dotnet:$PATH
+```
+- Press CTRL+S to save and CTRL+X to exit
+- Put also the environment variables for the application so debugging with VS Code can pick them up. For this, open the file `.profile`:
+```bash
+nano .profile
+```
+- Go to the end of the file and add the environment variables with their debug values:
+```
+export DEVICE_TIMER_WEB_SOCKET_URL=wss://192.168.1.9:65445
+export DEVICE_TIMER_SERVER_CERTIFICATE_THUMBPRINT=02C347A57731C65931D30D3D93298BDC610488A8
 ```
 - Press CTRL+S to save and CTRL+X to exit
 - Restart the Raspberry Pi:
@@ -67,3 +77,11 @@ git clone https://github.com/computerclubsystem/device-timer.git
 - At some point the VS Code "Output" window will open and will show VS Code is downloading dotnet-runtime. After this process is done - restart VS Code
 - After the extensions are installed and VS Code is restarted, some actions might need to be performed before seeing "Solution explorer" at the bottom of VS Code "Explorer (CTRL+SHIFT+E)" - if you don't see the "Solution Explorer" there - Open the folder `/home/pi/dev/device-timer` , open a terminal and build the solution with "dotnet build", now File - Close folder, restart VS Code, connect again and open the folder /home/pi/dev/device-timer - go to "Explorer" - you should now see the "Solution Explorer".
 - Go to VS Code's "Run and Debug" - you will see "DeviceTimerApp" which already has configuration in `.vscode/launch.json` file - set a breakpoint somewhere (for example in App.cs function Start) and click on the "Play" button - verify that debugging works as expected
+
+## Command line parameters and environment variables
+The application recognizes the following command line parameters and their corresponding environment variables (which can be put in `.bashrc`):
+
+| CmdLine param | Env var | Sample |
+| ------------- | ------- | ------ |
+| --web-socket-url | DEVICE_TIMER_WEB_SOCKET_URL | wss://192.168.1.9:65445 |
+| --server-certificate-thumbprint | DEVICE_TIMER_SERVER_CERTIFICATE_THUMBPRINT | 02C347A57731C65931D30D3D93298BDC610488A8 |

@@ -1,7 +1,6 @@
 ﻿using System.Device.Gpio;
 using System.Device.Gpio.Drivers;
 
-
 namespace DeviceTimer.IOController;
 
 public class RaspberryPi5Gpio
