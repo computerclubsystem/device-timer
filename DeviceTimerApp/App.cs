@@ -12,6 +12,7 @@ public class App
     private AppState _state;
     private RaspberryPi5Gpio _gpio;
     private PlayStationPower _psPower;
+    private TimerManager _timerManager;
     private Temperatures _temperatures = new();
 
     public App(string[] args)
@@ -26,10 +27,9 @@ public class App
         _psPower = new PlayStationPower(
             _gpio,
             _state.StartPlayStationPowerInputPin,
-            _state.StartPlayStationPowerOutputPin,
-            _state.StartTimeOnOutputPin,
-            _state.AdditionalOutputPin
+            _state.StartPlayStationPowerOutputPin
         );
+        _timerManager = new TimerManager(_gpio, _state.StartTimeOnInputPinNumber, _state.StartTimeOnOutputPinNumber);
         StartWebSocket();
         StartGpioFlow();
         try
@@ -85,6 +85,7 @@ public class App
     private void StartGpioFlow()
     {
         _psPower.StartMonitoring();
+        _timerManager.StartMonitoring();
     }
 
     private void ConfigurePins()
@@ -92,10 +93,10 @@ public class App
         _state.StartPlayStationPowerOutputPin = _gpio.ConfigurePinAsOutput(_state.StartPlayStationPowerOutputPinNumber);
         _state.StartPlayStationPowerOutputPin.Write(PinValue.Low);
         _state.StartPlayStationPowerInputPin = _gpio.ConfigurePinAsInput(_state.StartPlayStationPowerInputPinNumber, PinMode.InputPullDown);
-        _state.StartTimeOnOutputPin = _gpio.ConfigurePinAsOutput(_state.StartTimeOnOutputPinNumber);
-        _state.StartTimeOnOutputPin.Write(PinValue.Low);
-        _state.AdditionalOutputPin = _gpio.ConfigurePinAsOutput(_state.AdditionalOutputPinNumber);
-        _state.AdditionalOutputPin.Write(PinValue.Low);
+        // _state.StartTimeOnOutputPin = _gpio.ConfigurePinAsOutput(_state.StartTimeOnOutputPinNumber);
+        // _state.StartTimeOnOutputPin.Write(PinValue.Low);
+        // _state.AdditionalOutputPin = _gpio.ConfigurePinAsOutput(_state.AdditionalOutputPinNumber);
+        // _state.AdditionalOutputPin.Write(PinValue.Low);
     }
 
     private RaspberryPi5Gpio CreateRaspberryPi5Gpio()
@@ -115,8 +116,9 @@ public class App
             CancellationToken = cts.Token,
             StartPlayStationPowerInputPinNumber = 25,
             StartPlayStationPowerOutputPinNumber = 23,
+            StartTimeOnInputPinNumber = 16,
             StartTimeOnOutputPinNumber = 22,
-            AdditionalOutputPinNumber = 24,
+            // AdditionalOutputPinNumber = 24,
             EnvironmentValues = CreateEnvironmentValues(args),
         };
         state.CancellationToken = state.CancellationTokenSource.Token;
@@ -158,10 +160,10 @@ public class App
         public GpioPin StartPlayStationPowerInputPin { get; set; }
         public required int StartPlayStationPowerOutputPinNumber { get; set; }
         public GpioPin StartPlayStationPowerOutputPin { get; set; }
+        public required int StartTimeOnInputPinNumber { get; set; }
         public required int StartTimeOnOutputPinNumber { get; set; }
-        public GpioPin StartTimeOnOutputPin { get; set; }
-        public required int AdditionalOutputPinNumber { get; set; }
-        public GpioPin AdditionalOutputPin { get; set; }
+        // public required int AdditionalOutputPinNumber { get; set; }
+        // public GpioPin AdditionalOutputPin { get; set; }
         public required CancellationTokenSource CancellationTokenSource { get; set; }
         public required CancellationToken CancellationToken { get; set; }
         public string[] Args { get; set; }

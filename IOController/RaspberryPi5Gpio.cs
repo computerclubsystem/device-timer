@@ -35,6 +35,11 @@ public class RaspberryPi5Gpio
         // }
     }
 
+    public GpioController GetController()
+    {
+        return _gpioController;
+    }
+
     public GpioPin ConfigurePinAsOutput(int pin)
     {
         return _gpioController.OpenPin(pin, PinMode.Output);
