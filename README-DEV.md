@@ -29,7 +29,7 @@ tar zxf dotnet-sdk-8.0.201-linux-arm64.tar.gz -C .dotnet
 nano .bashrc
 ```
 - Go to the end of the file and add these two lines:
-```
+```bash
 export DOTNET_ROOT=~/.dotnet
 export PATH=~/.dotnet:$PATH
 ```
