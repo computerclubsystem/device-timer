@@ -39,7 +39,7 @@ export PATH=~/.dotnet:$PATH
 nano .profile
 ```
 - Go to the end of the file and add the environment variables with their debug values:
-```
+```bash
 export DEVICE_TIMER_WEB_SOCKET_URL=wss://192.168.1.9:65445
 export DEVICE_TIMER_SERVER_CERTIFICATE_THUMBPRINT=02C347A57731C65931D30D3D93298BDC610488A8
 ```
