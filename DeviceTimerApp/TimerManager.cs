@@ -83,9 +83,9 @@ class TimerManager
         while (_state.TimerTaskEnabled)
         {
             int remainingSeconds = 0;
+            var now = DateTime.Now;
             if (_state.IsTimerOn)
             {
-                var now = DateTime.Now;
                 var shouldStopAt = _state.StartedAt?.AddSeconds(_state.CoinsIn * _state.CoinTimeSeconds);
                 var diff = shouldStopAt - now;
                 remainingSeconds = (int)diff?.TotalSeconds;

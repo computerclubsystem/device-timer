@@ -49,7 +49,6 @@ public class App
         _state.WSConnector.SetExceptionAction(OnWebSocketException);
         WSConnectorSettings wsSettings = new()
         {
-            // wss://192.168.1.9:65445
             Uri = new Uri(_state.EnvironmentValues.WebSocketUrl),
             // ClientCertificatePemFileText = File.ReadAllText("/etc/ssl/certs/device-timer.pem"),
             ClientCertificateCertFileText = File.ReadAllText("/etc/ssl/certs/device-timer.crt"),
@@ -118,7 +117,6 @@ public class App
             StartPlayStationPowerOutputPinNumber = 23,
             StartTimeOnInputPinNumber = 16,
             StartTimeOnOutputPinNumber = 22,
-            // AdditionalOutputPinNumber = 24,
             EnvironmentValues = CreateEnvironmentValues(args),
         };
         state.CancellationToken = state.CancellationTokenSource.Token;
