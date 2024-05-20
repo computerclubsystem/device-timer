@@ -1,5 +1,6 @@
 ﻿using System.Net.Security;
 using System.Net.WebSockets;
+using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 
 namespace DeviceTimer.WebSocketConnector;
@@ -20,6 +21,7 @@ public class WSConnector
             CancellationTokenSource = new CancellationTokenSource()
         };
         state.CancellationToken = state.CancellationTokenSource.Token;
+        SetCertifiactesToState();
     }
 
     public void SetConnectedAction(Action action)
@@ -63,7 +65,7 @@ public class WSConnector
                     catch { }
                 }
                 state.WebSocket = new ClientWebSocket();
-                SetupCertificates();
+                SetupWebSocketCertificates();
                 //Log("Connecting to " + uriString);
                 await state.WebSocket.ConnectAsync(state.Settings.Uri, state.CancellationToken);
                 //Log("Connected");
@@ -74,7 +76,7 @@ public class WSConnector
             {
                 exceptionAction(ex);
                 Thread.Sleep(TimeSpan.FromSeconds(1));
-                //Log("Cannot connect. " + ex.ToString());
+                // Log("Cannot connect. " + ex.ToString());
             }
         }
         StartReceiving();
@@ -144,7 +146,7 @@ public class WSConnector
         }
     }
 
-    private void SetupCertificates()
+    private void SetCertifiactesToState()
     {
         X509Certificate2 cert = X509Certificate2.CreateFromPem(
             state.Settings.ClientCertificateCertFileText.AsSpan(),
@@ -157,7 +159,12 @@ public class WSConnector
         //     state.Settings.ClientCertificatePemFileText.AsSpan()
         // );
         // var pk = cert.GetRSAPrivateKey();
-        state.WebSocket.Options.ClientCertificates = new X509Certificate2Collection(cert);
+        state.ClientCertificates = new X509Certificate2Collection(cert);
+    }
+
+    private void SetupWebSocketCertificates()
+    {
+        state.WebSocket.Options.ClientCertificates = state.ClientCertificates;
         state.WebSocket.Options.RemoteCertificateValidationCallback = (object sender, X509Certificate? certificate, X509Chain? chain, SslPolicyErrors sslPolicyErrors) =>
         {
             if (certificate is null)
@@ -177,6 +184,7 @@ public class WSConnector
     {
         public WSConnectorSettings Settings { get; set; }
         public ClientWebSocket WebSocket { get; set; }
+        public X509Certificate2Collection ClientCertificates { get; set; }
         public CancellationTokenSource CancellationTokenSource { get; set; }
         public CancellationToken CancellationToken { get; set; }
     }

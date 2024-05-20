@@ -4,6 +4,8 @@
     <ProjectReference Include="..\WebSocketConnector\WebSocketConnector.csproj" />
     <ProjectReference Include="..\IOController\IOController.csproj" />
     <ProjectReference Include="..\Sensors\Sensors.csproj" />
+    <ProjectReference Include="..\CountdownDisplay\CountdownDisplay.csproj" />
+    <ProjectReference Include="..\Tm1637Ported\Tm1637Ported.csproj" />
   </ItemGroup>
 
   <ItemGroup>

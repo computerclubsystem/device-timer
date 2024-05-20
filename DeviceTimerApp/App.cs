@@ -1,9 +1,14 @@
 using System.Device.Gpio;
-using System.Reflection.Metadata;
-using System.Runtime.CompilerServices;
+// using System.Reflection.Metadata;
+// using System.Runtime.CompilerServices;
 using DeviceTimer.IOController;
 using DeviceTimer.Sensors;
 using DeviceTimer.WebSocketConnector;
+using DeviceTimer.CountdownDisplay;
+using DeviceTimer.Tm1637Ported;
+using System.Globalization;
+// using Iot.Device.Common;
+// using Microsoft.Extensions.Logging;
 
 namespace DeviceTimer.DeviceTimerApp;
 
@@ -13,6 +18,8 @@ public class App
     private RaspberryPi5Gpio _gpio;
     private PlayStationPower _psPower;
     private TimerManager _timerManager;
+    private FourDigitDisplay _fourDigitsDisplay;
+    private Tm1637PortedDisplay _tmPortedDisplay;
     private Temperatures _temperatures = new();
 
     public App(string[] args)
@@ -24,20 +31,71 @@ public class App
     {
         _gpio = CreateRaspberryPi5Gpio();
         ConfigurePins();
-        _psPower = new PlayStationPower(
-            _gpio,
-            _state.StartPlayStationPowerInputPin,
-            _state.StartPlayStationPowerOutputPin
-        );
-        _timerManager = new TimerManager(_gpio, _state.StartTimeOnInputPinNumber, _state.StartTimeOnOutputPinNumber);
+        StartGpioModules();
         StartWebSocket();
-        StartGpioFlow();
+        _timerManager.RemainingTimeChanged += OnRemainingTimeChanged;
         try
         {
             await Task.Delay(Timeout.InfiniteTimeSpan, _state.CancellationToken);
         }
         catch { }
         CleanUp();
+    }
+
+    private void StartTm1637PortedDisplay()
+    {
+        Tm1637PortedDisplayConfig config = new()
+        {
+            ClockPin = 5,
+            DataPin = 6,
+            ClockWidth = TimeSpan.FromMicroseconds(7),
+            GpioController = _gpio.GetController(),
+        };
+        _tmPortedDisplay = new Tm1637PortedDisplay(config);
+    }
+
+    private void StartFourDigitDisplay()
+    {
+        // _fourDigitsDisplay = new FourDigitDisplay(_gpio.GetController(), _state.FourDigitsDisplayClockPinNumber, _state.FourDigitsDisplayDataPinNumber);
+        // _fourDigitsDisplay.Test();
+        // // // Thread.Sleep(500);
+        // // // _fourDigitsDisplay.Init();
+        // // // _fourDigitsDisplay.ClearDisplay();
+        // // // _fourDigitsDisplay.SetScreenOnOffState(true);
+        // // // _fourDigitsDisplay.ShowText("68:68");
+        // // // _fourDigitsDisplay.ShowCharacterAtPosition(0, '5');
+        // // // _fourDigitsDisplay.Dispose();
+        // // _gpio.Dispose();
+        // return;
+
+        _fourDigitsDisplay = new FourDigitDisplay(_gpio.GetController(), _state.FourDigitsDisplayClockPinNumber, _state.FourDigitsDisplayDataPinNumber);
+        _fourDigitsDisplay.Init();
+        _fourDigitsDisplay.ClearDisplay();
+        _fourDigitsDisplay.SetScreenOnOffState(true);
+    }
+
+    private void OnRemainingTimeChanged(object sender, RemainingTimeChangedEventArgs e)
+    {
+        _fourDigitsDisplay.ShowSecondsAsTime(e.RemainingSeconds);
+        
+        // // // _tmPortedDisplay.ShowSecondsAsTime(e.RemainingSeconds);
+        // var ttt = e.RemainingSeconds.ToString(CultureInfo.InvariantCulture);
+        // char lastChar = ttt[^1];
+        // string hhh = new(lastChar, 4);
+        // _fourDigitsDisplay.ShowText(hhh);
+    }
+
+    private void StartTemperatureMeasurement()
+    {
+        Task.Factory.StartNew(async () =>
+        {
+            while (true)
+            {
+                double cpuTemp = _temperatures.GetCpuTemperature();
+                Console.WriteLine("CPU temp {0}", cpuTemp);
+                await Task.Delay(TimeSpan.FromSeconds(5));
+            }
+        });
     }
 
     private void StartWebSocket()
@@ -62,28 +120,46 @@ public class App
 
     private void OnWebSocketDataReceived(byte[] data)
     {
-        Console.WriteLine("Data received {0}", data.Length);
+        // Console.WriteLine("Data received {0}", data.Length);
     }
 
     private void OnWebSocketConnected()
     {
         _state.WSConnectorConnectionsCount++;
-        Console.WriteLine("Connected {0}", _state.WSConnectorConnectionsCount);
+        // Console.WriteLine("Connected {0}", _state.WSConnectorConnectionsCount);
     }
     private void OnWebSocketDisconnected()
     {
         _state.WSConnectorDisconnectionsCount++;
-        Console.WriteLine("Disconnected {0}", _state.WSConnectorDisconnectionsCount);
+        // Console.WriteLine("Disconnected {0}", _state.WSConnectorDisconnectionsCount);
     }
     private void OnWebSocketException(Exception ex)
     {
         _state.WSConnectorExceptionsCount++;
-        Console.WriteLine("Exception {0} {1}", _state.WSConnectorExceptionsCount, ex);
+        // Console.WriteLine("Exception {0} {1}", _state.WSConnectorExceptionsCount, ex);
     }
 
-    private void StartGpioFlow()
+    private void StartGpioModules()
     {
+        StartPsPower();
+        StartTimerManager();
+        StartFourDigitDisplay();
+        StartTemperatureMeasurement();
+    }
+
+    private void StartPsPower()
+    {
+        _psPower = new PlayStationPower(
+            _gpio,
+            _state.StartPlayStationPowerInputPin,
+            _state.StartPlayStationPowerOutputPin
+        );
         _psPower.StartMonitoring();
+    }
+
+    private void StartTimerManager()
+    {
+        _timerManager = new TimerManager(_gpio, _state.StartTimeOnInputPinNumber, _state.StartTimeOnOutputPinNumber);
         _timerManager.StartMonitoring();
     }
 
@@ -117,6 +193,8 @@ public class App
             StartPlayStationPowerOutputPinNumber = 23,
             StartTimeOnInputPinNumber = 16,
             StartTimeOnOutputPinNumber = 22,
+            FourDigitsDisplayClockPinNumber = 5,
+            FourDigitsDisplayDataPinNumber = 6,
             EnvironmentValues = CreateEnvironmentValues(args),
         };
         state.CancellationToken = state.CancellationTokenSource.Token;
@@ -149,6 +227,7 @@ public class App
     private void CleanUp()
     {
         _psPower.Dispose();
+        _fourDigitsDisplay.Dispose();
         _gpio.Dispose();
     }
 
@@ -160,6 +239,8 @@ public class App
         public GpioPin StartPlayStationPowerOutputPin { get; set; }
         public required int StartTimeOnInputPinNumber { get; set; }
         public required int StartTimeOnOutputPinNumber { get; set; }
+        public int FourDigitsDisplayClockPinNumber { get; set; }
+        public int FourDigitsDisplayDataPinNumber { get; set; }
         // public required int AdditionalOutputPinNumber { get; set; }
         // public GpioPin AdditionalOutputPin { get; set; }
         public required CancellationTokenSource CancellationTokenSource { get; set; }

@@ -4,12 +4,20 @@ using System.Reactive.Subjects;
 using DeviceTimer.IOController;
 using Iot.Device.Button;
 
+class RemainingTimeChangedEventArgs : EventArgs
+{
+    public int RemainingSeconds { get; set; }
+    public bool IsTimerOn { get; set; }
+}
+
 class TimerManager
 {
+    public event EventHandler<RemainingTimeChangedEventArgs> RemainingTimeChanged;
+
     private TimerManagerState _state;
-    private IDisposable inputPinValueChangesSubscription;
+    private IDisposable coinInputPinValueChangesSubscription;
     private Subjects subjects;
-    private readonly TimeSpan inputPinThrottleTimeSpan = TimeSpan.FromSeconds(1);
+    private readonly TimeSpan coinInputPinThrottleTimeSpan = TimeSpan.FromSeconds(1);
 
     private readonly object _lockObject = new object();
     private Task timerTask;
@@ -37,8 +45,8 @@ class TimerManager
     {
         _state.GpioController.ConfigurePinAsInput(_state.InputPinNumber, PinMode.InputPullDown);
         _state.GpioController.ConfigurePinAsOutput(_state.OutputPinNumber);
-        inputPinValueChangesSubscription = subjects.CoinInputPinValueChangesObservable
-            .Throttle(inputPinThrottleTimeSpan)
+        coinInputPinValueChangesSubscription = subjects.CoinInputPinValueChangesObservable
+            .Throttle(coinInputPinThrottleTimeSpan)
             .Subscribe(OnCoinInputPinChangeDetected);
         _state.GpioController.RegisterCallbackForPinValueChangedEvent(
             _state.InputPinNumber,
@@ -55,7 +63,7 @@ class TimerManager
 
     private void OnCoinInputPinChangeDetected(PinValueChangedEventArgs args)
     {
-        Console.WriteLine("Coin input pin {0}", args.ChangeType);
+        Log("Coin input pin {0}", args.ChangeType);
         // subjects.PowerOnInputPinValueChangeDetectedSubject.OnNext(args.ChangeType);
         if (args.ChangeType == PinEventTypes.Falling)
         {
@@ -69,6 +77,8 @@ class TimerManager
             {
                 _state.CoinsIn += 1;
             }
+            _state.TotalCoinsInCount++;
+            LogState();
             // SetTryPowerOnOutputPinValue(PinValue.Low);
         }
     }
@@ -95,6 +105,11 @@ class TimerManager
                 remainingSeconds = 0;
                 _state.CoinsIn = 0;
                 _state.IsTimerOn = false;
+                RaiseRemainingSeconds(0, false);
+            }
+            else
+            {
+                RaiseRemainingSeconds(remainingSeconds, _state.IsTimerOn);
             }
             _state.RemainingSeconds = remainingSeconds;
             _state.GpioController.SetOutputPinValue(_state.OutputPinNumber, _state.IsTimerOn);
@@ -103,22 +118,39 @@ class TimerManager
         }
     }
 
-    private void StartTime()
+    private void RaiseRemainingSeconds(int seconds, bool isTimerOn)
     {
-        lock (_lockObject)
-        {
-            _state.IsTimerOn = true;
-            _state.CoinsIn = 1;
-            _state.StartedAt = DateTime.Now;
-        }
+        RemainingTimeChanged?.Invoke(this, new RemainingTimeChangedEventArgs() { RemainingSeconds = seconds, IsTimerOn = isTimerOn });
     }
 
-    private void AddCoin()
+    // private void StartTime()
+    // {
+    //     lock (_lockObject)
+    //     {
+    //         _state.IsTimerOn = true;
+    //         _state.CoinsIn = 1;
+    //         _state.StartedAt = DateTime.Now;
+    //     }
+    // }
+
+    // private void AddCoin()
+    // {
+    //     lock (_lockObject)
+    //     {
+    //         _state.CoinsIn++;
+    //     }
+    // }
+
+    private void LogState()
     {
-        lock (_lockObject)
-        {
-            _state.CoinsIn++;
-        }
+        var text = string.Format($"TotalCoinsInCount={_state.TotalCoinsInCount}");
+        Log(text);
+    }
+
+    private void Log(string format, params object[] arg)
+    {
+        var now = DateTime.Now.ToString("O");
+        Console.WriteLine($"{now} - TimerManager - {format}", arg);
     }
 
     private class TimerManagerState
@@ -129,6 +161,7 @@ class TimerManager
         // public GpioButton InputButton { get; set; }
         public int RemainingSeconds { get; set; }
         public int CoinsIn { get; set; }
+        public int TotalCoinsInCount { get; set; }
         public int CoinTimeSeconds { get; set; }
         public bool IsTimerOn { get; set; }
         public DateTime? StartedAt { get; set; }

@@ -8,8 +8,9 @@ namespace DeviceTimer.DeviceTimerApp;
 public class PlayStationPower
 {
     private readonly RaspberryPi5Gpio gpio;
-    private Pins pins;
-    private Subjects subjects;
+    private readonly Pins pins;
+    private readonly Subjects subjects;
+    private readonly PlayStationPowerState state;
     private CancellationTokenSource tryPowerOnCancellationTokenSource;
     private Task powerOnTask;
 
@@ -32,6 +33,11 @@ public class PlayStationPower
             PowerOnInputPinValueChangeDetectedSubject = new(),
         };
         subjects.PowerOnInputPinValueChangesObservable = subjects.PowerOnInputPinValueChangesSubject.AsObservable();
+        state = new PlayStationPowerState
+        {
+            PowerOnOutputPinHighValueCount = 0,
+            PowerInputPinRisingChangesCount = 0,
+        };
     }
 
     public IObservable<PinEventTypes> GetPowerButtonChangeDetectedObservable()
@@ -55,10 +61,12 @@ public class PlayStationPower
 
     private void OnPowerInputPinChangeDetected(PinValueChangedEventArgs args)
     {
-        Console.WriteLine("Power input pin {0}", args.ChangeType);
+        Log("Power input pin {0}", args.ChangeType);
         subjects.PowerOnInputPinValueChangeDetectedSubject.OnNext(args.ChangeType);
         if (args.ChangeType == PinEventTypes.Rising)
         {
+            state.PowerInputPinRisingChangesCount++;
+            LogState();
             SetTryPowerOnOutputPinValue(PinValue.Low);
         }
     }
@@ -84,14 +92,23 @@ public class PlayStationPower
 
     public void Dispose()
     {
-        // Stop the threads, unsubscribe etc.
-        inputPinValueChangesSubscription?.Dispose();
-        try
+        Dispose(true);
+        GC.SuppressFinalize(this);
+    }
+
+    protected virtual void Dispose(bool disposing)
+    {
+        if (disposing)
         {
-            tryPowerOnCancellationTokenSource.Cancel();
+            // Stop the threads, unsubscribe etc.
+            inputPinValueChangesSubscription?.Dispose();
+            try
+            {
+                tryPowerOnCancellationTokenSource.Cancel();
+            }
+            catch { }
+            StopMonitoring();
         }
-        catch { }
-        StopMonitoring();
     }
 
     private async void TryPowerOnAction()
@@ -108,6 +125,8 @@ public class PlayStationPower
                 if (IsPlayStationPowerOff())
                 {
                     SetTryPowerOnOutputPinValue(PinValue.High);
+                    state.PowerOnOutputPinHighValueCount++;
+                    LogState();
                     await Task.Delay(TimeSpan.FromSeconds(1), tryPowerOnCancellationTokenSource.Token);
                 }
             }
@@ -127,6 +146,18 @@ public class PlayStationPower
         subjects.PowerOnInputPinValueChangesSubject.OnNext(pinValueChangedEventArgs);
     }
 
+    private void LogState()
+    {
+        var text = string.Format($"PowerOnOutputPinHighValueCount={state.PowerOnOutputPinHighValueCount} , PowerInputPinRisingChangesCount={state.PowerInputPinRisingChangesCount}");
+        Log(text);
+    }
+
+    private void Log(string format, params object[] arg)
+    {
+        var now = DateTime.Now.ToString("O");
+        Console.WriteLine($"{now} - PlayStationPower - {format}", arg);
+    }
+
     private class Pins
     {
         public GpioPin PowerOnInputPin { get; set; }
@@ -138,5 +169,11 @@ public class PlayStationPower
         public Subject<PinValueChangedEventArgs> PowerOnInputPinValueChangesSubject { get; set; }
         public IObservable<PinValueChangedEventArgs> PowerOnInputPinValueChangesObservable { get; set; }
         public Subject<PinEventTypes> PowerOnInputPinValueChangeDetectedSubject { get; set; }
+    }
+
+    private class PlayStationPowerState
+    {
+        public int PowerOnOutputPinHighValueCount { get; set; }
+        public int PowerInputPinRisingChangesCount { get; set; }
     }
 }
