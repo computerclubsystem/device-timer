@@ -148,14 +148,17 @@ public class WSConnector
 
     private void SetCertifiactesToState()
     {
-        if (state.Settings.ClientCertificate != null) {
-            state.ClientCertificates = new X509Certificate2Collection(state.Settings.ClientCertificate);
-        } else {
-            X509Certificate2 cert = X509Certificate2.CreateFromPem(
+        X509Certificate2 cert;
+        if (state.Settings.ClientCertificate != null)
+        {
+            cert = state.Settings.ClientCertificate;
+        }
+        else
+        {
+            cert = X509Certificate2.CreateFromPem(
                 state.Settings.ClientCertificateCertFileText.AsSpan(),
                 state.Settings.ClientCertificateKeyFileText.AsSpan()
             );
-            state.ClientCertificates = new X509Certificate2Collection(cert);
         }
         // TODO: Find the reason why using .pem file which is just the .key and .crt files concatenated 
         //     : does not work - its cert.GetRSAPrivateKey() returns null meaning no certificate is used with the WebSocket
@@ -164,7 +167,7 @@ public class WSConnector
         //     state.Settings.ClientCertificatePemFileText.AsSpan()
         // );
         // var pk = cert.GetRSAPrivateKey();
-        // state.ClientCertificates = new X509Certificate2Collection(cert);
+        state.ClientCertificates = new X509Certificate2Collection(cert);
     }
 
     private void SetupWebSocketCertificates()
@@ -201,7 +204,7 @@ public class WSConnectorSettings
     // public string ClientCertificatePemFileText { get; set; }
     public string ClientCertificateCertFileText { get; set; }
     public string ClientCertificateKeyFileText { get; set; }
-        /// <summary>
+    /// <summary>
     /// If ClientCertificateCertFileText and ClientCertificateKeyFileText are not provided, this must be set
     /// </summary>
     public X509Certificate2? ClientCertificate { get; set; }
