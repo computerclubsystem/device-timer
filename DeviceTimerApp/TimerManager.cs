@@ -67,17 +67,20 @@ class TimerManager
         // subjects.PowerOnInputPinValueChangeDetectedSubject.OnNext(args.ChangeType);
         if (args.ChangeType == PinEventTypes.Falling)
         {
-            if (!_state.IsTimerOn)
+            lock (_state)
             {
-                _state.IsTimerOn = true;
-                _state.CoinsIn = 1;
-                _state.StartedAt = DateTime.Now;
+                if (!_state.IsTimerOn)
+                {
+                    _state.StartedAt = DateTime.Now;
+                    _state.IsTimerOn = true;
+                    _state.CoinsIn = 1;
+                }
+                else
+                {
+                    _state.CoinsIn += 1;
+                }
+                _state.TotalCoinsInCount++;
             }
-            else
-            {
-                _state.CoinsIn += 1;
-            }
-            _state.TotalCoinsInCount++;
             LogState();
             // SetTryPowerOnOutputPinValue(PinValue.Low);
         }
@@ -94,26 +97,29 @@ class TimerManager
         {
             int remainingSeconds = 0;
             var now = DateTime.Now;
-            if (_state.IsTimerOn)
+            lock (_state)
             {
-                var shouldStopAt = _state.StartedAt?.AddSeconds(_state.CoinsIn * _state.CoinTimeSeconds);
-                var diff = shouldStopAt - now;
-                remainingSeconds = (int)diff?.TotalSeconds;
+                if (_state.IsTimerOn)
+                {
+                    var shouldStopAt = _state.StartedAt?.AddSeconds(_state.CoinsIn * _state.CoinTimeSeconds);
+                    var diff = shouldStopAt - now;
+                    remainingSeconds = (int)diff?.TotalSeconds;
+                }
+                if (remainingSeconds == null || remainingSeconds < 0)
+                {
+                    remainingSeconds = 0;
+                    _state.CoinsIn = 0;
+                    _state.IsTimerOn = false;
+                    RaiseRemainingSeconds(0, false);
+                }
+                else if (remainingSeconds >= 0)
+                {
+                    RaiseRemainingSeconds(remainingSeconds, _state.IsTimerOn);
+                }
+                _state.RemainingSeconds = remainingSeconds;
+                _state.GpioController.SetOutputPinValue(_state.OutputPinNumber, _state.IsTimerOn);
+                Console.WriteLine("Time started {0} at {1}, coins in {2}, remaining seconds {3}", _state.IsTimerOn, _state.StartedAt, _state.CoinsIn, _state.RemainingSeconds);
             }
-            if (remainingSeconds < 0)
-            {
-                remainingSeconds = 0;
-                _state.CoinsIn = 0;
-                _state.IsTimerOn = false;
-                RaiseRemainingSeconds(0, false);
-            }
-            else
-            {
-                RaiseRemainingSeconds(remainingSeconds, _state.IsTimerOn);
-            }
-            _state.RemainingSeconds = remainingSeconds;
-            _state.GpioController.SetOutputPinValue(_state.OutputPinNumber, _state.IsTimerOn);
-            Console.WriteLine("Time started {0} at {1}, coins in {2}, remaining seconds {3}", _state.IsTimerOn, _state.StartedAt, _state.CoinsIn, _state.RemainingSeconds);
             await Task.Delay(TimeSpan.FromSeconds(1), CancellationToken.None);
         }
     }
